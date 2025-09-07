@@ -20,6 +20,5 @@ interface app {
 }
 
 world host {
-    export app;
-    import guest;
+    import app;
 }
