@@ -1,29 +1,25 @@
 package wasvy:ecs;
 
-interface sys {
+interface guest {
+	// guest provides the system resource implementation
     resource system {
         run: func(input: string) -> string;
     }
+
+	// and a setup function
+	setup: func();
 }
 
 interface app {
-	use sys.{system};
+	use guest.{system};
 
     resource app {
         constructor();
-        add-system: func(sys: system);
+        add-system: func(system: system);
     }
 }
 
 world host {
     export app;
-    import sys;
-}
-
-world guest {
-    // guest provides the system resource implementation
-    export sys;
-
-	// and a setup function
-	export setup: func();
+    import guest;
 }

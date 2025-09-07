@@ -1,120 +1,48 @@
+use crate::bindings::{
+    exports::wasvy::ecs::guest::{Guest, GuestSystem, System},
+    wasvy::ecs::app::App,
+};
+
 #[allow(warnings)]
 mod bindings;
 
-use bindings::{
-    Guest,
-    wasvy::{
-        self,
-        ecs::types::{Component, Query},
-    },
-};
-use serde::{Deserialize, Serialize};
+struct ModSystem(Box<dyn Fn(String) -> String>);
 
-use bevy::{prelude::*, reflect::Type};
+impl GuestSystem for ModSystem {
+    fn run(&self, input: String) -> String {
+        (self.0)(input)
+    }
+}
 
 struct GuestComponent;
 
-#[derive(Debug, Reflect, Serialize, Deserialize)]
-pub struct FirstComponent {
-    pub first: usize,
-}
-
-#[derive(Debug, Reflect, Serialize, Deserialize)]
-pub struct SecondComponent {
-    pub second: usize,
-}
-
 impl Guest for GuestComponent {
-    fn hello_world() -> String {
-        "Hello, World!".to_string()
-    }
-
-    /// The params in this instance will be equal to: `[Query<&FirstComponent>]`
-    /// due to how the system was registered in `setup`.
-    ///
-    /// If for example the system was registered with
-    /// `components: [simple::FirstComponent, simple::SecondComponent]`
-    /// then params would be equal to `[Query<(&FirstComponent, &SecondComponent)>]`
-    fn print_first_component_system(params: Vec<bindings::QueryResult>) {
-        let first_component_query = params.first().unwrap();
-        for row in first_component_query {
-            let entity = row.entity;
-            println!("Entity: {:?}", entity);
-            let component = row.components.first().unwrap();
-            let first_component: FirstComponent = serde_json::from_str(&component.value).unwrap();
-            println!("Component: {:?}", first_component);
-        }
-    }
-
-    fn two_components_in_a_query(params: Vec<bindings::QueryResult>) {
-        let query = params.first().unwrap();
-        for row in query {
-            let second_component_serialized = row.components.first().unwrap();
-            let second_component: SecondComponent =
-                serde_json::from_str(&second_component_serialized.value).unwrap();
-
-            let transform_component_serialized = &row.components[1];
-            let transform_component: Transform =
-                serde_json::from_str(&transform_component_serialized.value).unwrap();
-
-            println!(
-                "Second Component: {:?}, Transform: {:?}",
-                second_component, transform_component
-            );
-        }
-    }
+    type System = ModSystem;
 
     fn setup() {
-        let first_component_type_path = Type::of::<FirstComponent>().path();
-        let second_component_type_path = Type::of::<SecondComponent>().path();
-        let transform_type_path = Type::of::<Transform>().path();
+        println!("Setup start");
 
-        let _id1 = wasvy::ecs::functions::register_component(first_component_type_path);
-        let _id2 = wasvy::ecs::functions::register_component(second_component_type_path);
+        let app = App::new();
 
-        wasvy::ecs::functions::register_system(
-            "print-first-component-system",
-            &[Query {
-                components: vec![first_component_type_path.to_string()],
-                with: vec![],
-                without: vec![],
-            }],
-        );
+        // A boxed system
+        let mod_system = ModSystem(Box::new(|input: String| {
+            format!("Ran system with input {input}")
+        }));
 
-        wasvy::ecs::functions::register_system(
-            "two-components-in-a-query",
-            &[Query {
-                components: vec![
-                    second_component_type_path.to_string(),
-                    transform_type_path.to_string(),
-                ],
-                with: vec![],
-                without: vec![],
-            }],
-        );
+        // An exported system, but still not what add_system expects
+        let export_system = System::new(mod_system);
 
-        let first_serialized = serde_json::to_string(&FirstComponent { first: 18 }).unwrap();
-        let second_serialized = serde_json::to_string(&SecondComponent { second: 18 }).unwrap();
-        let transform_serialized = serde_json::to_string(
-            &Transform::default().with_translation(Vec3::new(10.0, 20.0, 30.0)),
-        )
-        .unwrap();
+        // There has to be a better way of doing this... but casting should be fine since both implementations match
+        let system = unsafe {
+            bindings::wasvy::ecs::guest::System::from_handle(export_system.take_handle())
+        };
 
-        wasvy::ecs::functions::spawn(&[Component {
-            path: first_component_type_path.to_string(),
-            value: first_serialized,
-        }]);
+        // Test that this system can be run
+        system.run("test");
 
-        wasvy::ecs::functions::spawn(&[
-            Component {
-                path: second_component_type_path.to_string(),
-                value: second_serialized,
-            },
-            Component {
-                path: transform_type_path.to_string(),
-                value: transform_serialized,
-            },
-        ]);
+        app.add_system(system);
+
+        println!("Setup end");
     }
 }
 

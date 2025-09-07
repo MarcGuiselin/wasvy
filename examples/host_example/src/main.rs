@@ -7,23 +7,17 @@ use wasvy::prelude::*;
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins)
-        .add_plugins((
-            // Next, add the [`ModloaderPlugin`] ;)
-            ModloaderPlugin,
-            // Plus some helpers for the example
-            EguiPlugin {
-                enable_multipass_for_primary_context: true,
-            },
-            WorldInspectorPlugin::new(),
-        ))
+        .add_plugins((DefaultPlugins, ModloaderPlugin))
         .add_systems(Startup, startup)
         .run();
 }
 
-/// Access the modloader's api through the Mods interface
-fn startup(mut mods: Mods) {
-    // Load one (or several) mods at once from the asset directory!
-    mods.load("mods/simple.wasm");
-    mods.load("mods/python.wasm");
+#[derive(Component, Reflect, Debug, Clone)]
+struct ColoredBox<T> {
+    color: T,
+}
+
+fn a(boxx: &mut ColoredBox) {
+    boxx.color.set_hue(0.5);
+    println!("Box color: {:?}", box.color);
 }
